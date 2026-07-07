@@ -1,0 +1,832 @@
+/* -------------------------------------------------------------------------
+   Base / reset
+   ------------------------------------------------------------------------- */
+
+:root {
+    --text-primary: rgba(255, 255, 255, 0.96);
+    --text-secondary: rgba(255, 255, 255, 0.66);
+    --text-muted: rgba(255, 255, 255, 0.42);
+    --line: rgba(255, 255, 255, 0.22);
+    --panel: rgba(10, 11, 13, 0.34);
+    --panel-strong: rgba(10, 11, 13, 0.62);
+    --ease-story: cubic-bezier(0.16, 1, 0.3, 1);
+    --inspection-dim-opacity: 0.18;
+    --inspection-clear-radius: 32%;
+    --inspection-full-dark-radius: 78%;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/*
+    IMPORTANT FOR FIVEM NUI TRANSPARENCY
+
+    The root CEF canvas itself must remain transparent. A dark `color-scheme`
+    declaration can cause some FiveM/CEF builds to paint the document canvas as
+    #121212 even when the body is hidden. Therefore both the root element and
+    body are kept as transparent rendering surfaces at all times.
+
+    Only the actual inspection app is shown/hidden below.
+*/
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: transparent !important;
+    background-color: rgba(0, 0, 0, 0) !important;
+}
+
+html {
+    /* Prevent browser theme defaults from painting an opaque CEF canvas. */
+    color-scheme: normal;
+}
+
+body {
+    display: block;
+    pointer-events: none;
+    user-select: none;
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    color: var(--text-primary);
+}
+
+/* Kept for the existing JS state machine; it must never change transparency. */
+body.nui-active {
+    display: block;
+    background: transparent !important;
+}
+
+/* -------------------------------------------------------------------------
+   Optional standalone interaction prompt
+   ------------------------------------------------------------------------- */
+
+.interact-prompt {
+    position: fixed;
+    left: 50%;
+    bottom: clamp(58px, 8.5vh, 104px);
+    z-index: 20;
+    display: grid;
+    grid-template-columns: 2px auto;
+    gap: 12px;
+    min-width: 320px;
+    max-width: min(620px, 76vw);
+    padding: 10px 18px 10px 12px;
+    border: 0;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(9, 10, 12, 0.56), rgba(9, 10, 12, 0.16) 76%, transparent 100%);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(-50%, 14px, 0) scale(0.985);
+    transition:
+        opacity 240ms var(--ease-story),
+        transform 420ms var(--ease-story),
+        visibility 0s linear 420ms;
+}
+
+.interact-prompt.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translate3d(-50%, 0, 0) scale(1);
+    transition:
+        opacity 240ms var(--ease-story),
+        transform 420ms var(--ease-story),
+        visibility 0s linear 0s;
+}
+
+.interact-prompt__accent {
+    width: 2px;
+    min-height: 42px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.10));
+}
+
+.interact-prompt__content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.interact-prompt__eyebrow {
+    margin-bottom: 5px;
+    color: var(--text-muted);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+}
+
+.interact-prompt__row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+.interact-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 25px;
+    padding: 0 8px;
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(255, 255, 255, 0.96);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+
+.interact-prompt__message {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.interact-prompt.is-locked .interact-key {
+    display: none;
+}
+
+.interact-prompt.is-locked .interact-prompt__prefix {
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.interact-prompt.is-locked .interact-prompt__message {
+    color: rgba(255, 255, 255, 0.58);
+}
+
+/* -------------------------------------------------------------------------
+   Full-screen inspection layer
+   ------------------------------------------------------------------------- */
+
+.inspection-app {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 420ms var(--ease-story),
+        visibility 0s linear 420ms;
+}
+
+.inspection-app::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    /*
+        Default mode: a normal fullscreen dark layer. This is used only when
+        `protectProp = false` in config.lua.
+    */
+    background: rgba(3, 4, 6, var(--inspection-dim-opacity));
+    opacity: 0;
+    transition: opacity 700ms ease;
+}
+
+.inspection-app.is-prop-protected::before {
+    /*
+        Focus-vignette mode: the center stays fully transparent so the NUI does
+        not visibly darken the inspect prop. The surrounding game world reaches
+        the configured opacity only after `--inspection-full-dark-radius`.
+
+        This is a deliberate screen-space solution: NUI is composited above the
+        3D world in FiveM, so a normal fullscreen black layer would always cover
+        both the background and the prop. The transparent focus area preserves
+        the prop while keeping the scene around it cinematic and dark.
+    */
+    background: radial-gradient(
+        ellipse at 50% 52%,
+        rgba(3, 4, 6, 0) 0%,
+        rgba(3, 4, 6, 0) var(--inspection-clear-radius),
+        rgba(3, 4, 6, var(--inspection-dim-opacity)) var(--inspection-full-dark-radius),
+        rgba(3, 4, 6, var(--inspection-dim-opacity)) 100%
+    );
+}
+
+.inspection-app.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 520ms var(--ease-story),
+        visibility 0s linear 0s;
+}
+
+.inspection-app.is-visible::before {
+    opacity: 1;
+}
+
+.inspection-app.is-closing {
+    opacity: 0;
+}
+
+/* -------------------------------------------------------------------------
+   AAA-style story information, top-left
+   ------------------------------------------------------------------------- */
+
+.story-panel {
+    position: absolute;
+    top: clamp(42px, 6.4vh, 86px);
+    left: clamp(40px, 4.4vw, 92px);
+    display: grid;
+    grid-template-columns: 2px minmax(300px, 560px);
+    gap: 18px;
+    width: min(620px, 46vw);
+    padding: 18px 20px 20px 0;
+    opacity: 0;
+    transform: translate3d(-22px, 8px, 0);
+    filter: blur(5px);
+    transition:
+        opacity 520ms var(--ease-story),
+        transform 760ms var(--ease-story),
+        filter 650ms var(--ease-story);
+}
+
+.story-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 -10px 0 -18px;
+    z-index: -1;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--panel), transparent 92%);
+    opacity: 0.75;
+}
+
+.inspection-app.is-visible .story-panel {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+    transition-delay: 90ms;
+}
+
+.inspection-app.is-closing .story-panel {
+    opacity: 0;
+    transform: translate3d(-16px, -2px, 0);
+    filter: blur(3px);
+    transition-delay: 0ms;
+}
+
+.story-panel__accent {
+    width: 2px;
+    height: 100%;
+    min-height: 124px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.06));
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 650ms var(--ease-story) 150ms;
+}
+
+.inspection-app.is-visible .story-panel__accent {
+    transform: scaleY(1);
+}
+
+.story-panel__content {
+    transition:
+        opacity 180ms ease,
+        transform 280ms var(--ease-story),
+        filter 240ms ease;
+}
+
+.story-panel__content.is-switching {
+    opacity: 0;
+    transform: translate3d(0, 7px, 0);
+    filter: blur(3px);
+}
+
+.story-panel__meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+}
+
+.story-panel__eyebrow {
+    color: var(--text-secondary);
+}
+
+.story-panel__counter {
+    color: var(--text-muted);
+}
+
+.story-panel__counter::before {
+    content: "";
+    display: inline-block;
+    width: 20px;
+    height: 1px;
+    margin: 0 10px 3px 0;
+    background: var(--line);
+}
+
+.story-panel__title {
+    margin: 0 0 10px;
+    font-size: clamp(28px, 2.2vw, 44px);
+    font-weight: 560;
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.32);
+}
+
+.story-panel__description {
+    max-width: 540px;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: clamp(13px, 0.92vw, 17px);
+    font-weight: 400;
+    line-height: 1.62;
+    text-wrap: pretty;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* -------------------------------------------------------------------------
+   Hotspot discovery
+   ------------------------------------------------------------------------- */
+
+.hotspot {
+    position: absolute;
+    top: 54%;
+    left: 50%;
+    display: grid;
+    grid-template-columns: 32px minmax(220px, 420px);
+    gap: 12px;
+    align-items: start;
+    width: min(470px, 42vw);
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(0.97);
+    visibility: hidden;
+    transition:
+        opacity 260ms var(--ease-story),
+        transform 430ms var(--ease-story),
+        visibility 0s linear 430ms;
+}
+
+.hotspot.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translate3d(-50%, -50%, 0) scale(1);
+    transition:
+        opacity 260ms var(--ease-story),
+        transform 430ms var(--ease-story),
+        visibility 0s linear 0s;
+}
+
+.hotspot__indicator {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    margin-top: 2px;
+}
+
+.hotspot__ring,
+.hotspot__dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.hotspot__ring {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    animation: hotspotPulse 1.9s ease-in-out infinite;
+}
+
+.hotspot__dot {
+    width: 5px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.75);
+}
+
+.hotspot__text-wrap {
+    padding: 10px 14px 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.26);
+    background: linear-gradient(90deg, var(--panel-strong), rgba(10, 11, 13, 0.08));
+}
+
+.hotspot__label {
+    display: block;
+    margin-bottom: 5px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+}
+
+.hotspot__text {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 13px;
+    line-height: 1.5;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes hotspotPulse {
+    0%, 100% {
+        opacity: 0.45;
+        transform: translate(-50%, -50%) scale(0.88);
+    }
+
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.08);
+    }
+}
+
+/* -------------------------------------------------------------------------
+   Development-only Prop Inspect Tool
+   ------------------------------------------------------------------------- */
+
+.debug-tool {
+    position: absolute;
+    top: clamp(46px, 6.2vh, 82px);
+    right: clamp(34px, 3.2vw, 70px);
+    width: min(400px, 36vw);
+    padding: 16px 18px 14px;
+    border-left: 2px solid rgba(255, 255, 255, 0.72);
+    background: linear-gradient(90deg, rgba(8, 9, 11, 0.80), rgba(8, 9, 11, 0.42));
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(18px, 0, 0);
+    transition:
+        opacity 220ms var(--ease-story),
+        transform 420ms var(--ease-story),
+        visibility 0s linear 420ms;
+}
+
+.debug-tool.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+    transition:
+        opacity 220ms var(--ease-story),
+        transform 420ms var(--ease-story),
+        visibility 0s linear 0s;
+}
+
+.debug-tool.is-hotspot-mode {
+    border-left-color: rgba(255, 255, 255, 0.96);
+}
+
+.debug-tool__header,
+.debug-tool__mode-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.debug-tool__header {
+    margin-bottom: 12px;
+}
+
+.debug-tool__eyebrow,
+.debug-tool__location,
+.debug-tool__mode-row > span,
+.debug-value__label,
+.debug-tool__section-label,
+.debug-zoom-card__title span {
+    color: rgba(255, 255, 255, 0.50);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.debug-tool__location {
+    letter-spacing: 0.08em;
+}
+
+.debug-tool__mode-row {
+    padding: 9px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.debug-hotspot-preview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.debug-hotspot-preview > span {
+    color: rgba(255, 255, 255, 0.50);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.debug-hotspot-preview__status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.debug-hotspot-preview__status strong {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    transition: color 160ms ease;
+}
+
+.debug-hotspot-preview__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.24);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+    transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.debug-tool.is-preview-missing .debug-hotspot-preview__status strong {
+    color: rgba(255, 255, 255, 0.76);
+}
+
+.debug-tool.is-preview-missing .debug-hotspot-preview__dot {
+    background: rgba(255, 255, 255, 0.48);
+}
+
+.debug-tool.is-preview-found .debug-hotspot-preview__status strong {
+    color: rgba(205, 255, 218, 0.96);
+}
+
+.debug-tool.is-preview-found .debug-hotspot-preview__dot {
+    background: rgba(186, 255, 204, 0.95);
+    box-shadow: 0 0 0 4px rgba(186, 255, 204, 0.10);
+    transform: scale(1.08);
+}
+
+.debug-tool__mode-value,
+.debug-zoom-card__title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.debug-tool__mode-row strong {
+    color: rgba(255, 255, 255, 0.96);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+.debug-tool__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.debug-value {
+    min-width: 0;
+    padding: 9px 10px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.debug-value--wide {
+    grid-column: 1 / -1;
+}
+
+.debug-value__label,
+.debug-tool__section-label {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.debug-tool__section-label {
+    margin-top: 13px;
+}
+
+.debug-tool code {
+    color: rgba(255, 255, 255, 0.95);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.debug-tool__zoom {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.debug-zoom-card {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.025);
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.debug-zoom-card.is-last-saved {
+    border-color: rgba(255, 255, 255, 0.56);
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.debug-tool.has-invalid-zoom .debug-zoom-card {
+    border-color: rgba(224, 92, 92, 0.46);
+}
+
+.debug-tool__controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px 12px;
+    margin-top: 13px;
+    padding-top: 11px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 9px;
+    line-height: 1.6;
+}
+
+.debug-tool__controls > span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.debug-control-wide {
+    grid-column: 1 / -1;
+}
+
+.debug-tool kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 21px;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid rgba(255, 255, 255, 0.23);
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.90);
+    font-family: inherit;
+    font-size: 8px;
+    font-weight: 800;
+}
+
+.debug-tool__notice {
+    min-height: 14px;
+    margin-top: 10px;
+    color: rgba(255, 255, 255, 0.0);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.10em;
+    transition: color 160ms ease;
+}
+
+.debug-tool__notice.is-visible {
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.debug-tool:not(.is-hotspot-mode) .debug-hotspot-only {
+    display: none;
+}
+
+/* The setup panel already contains its own controls, so the normal inspection
+   footer is hidden to keep the authoring workspace simple and uncluttered. */
+.inspection-app.is-debug-tool .controls {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+/* -------------------------------------------------------------------------
+   Bottom input prompts
+   ------------------------------------------------------------------------- */
+
+.controls {
+    position: absolute;
+    left: 50%;
+    bottom: clamp(28px, 4.4vh, 58px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(18px, 1.9vw, 32px);
+    padding: 8px 12px;
+    opacity: 0;
+    transform: translate3d(-50%, 16px, 0);
+    transition:
+        opacity 500ms var(--ease-story),
+        transform 720ms var(--ease-story);
+}
+
+.inspection-app.is-visible .controls {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+    transition-delay: 180ms;
+}
+
+.inspection-app.is-closing .controls {
+    opacity: 0;
+    transform: translate3d(-50%, 10px, 0);
+    transition-delay: 0ms;
+}
+
+.control-prompt {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    background: transparent;
+}
+
+/*
+    Small separators keep the control row readable without wrapping every
+    prompt in an opaque card. The controls deliberately avoid browser backdrop
+    effects because FiveM CEF can render them as black compositor rectangles.
+*/
+.control-prompt + .control-prompt::before {
+    content: "";
+    position: absolute;
+    left: calc(clamp(18px, 1.9vw, 32px) / -2);
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.10);
+}
+
+.key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 27px;
+    height: 25px;
+    padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    border-radius: 3px;
+    background: rgba(8, 9, 11, 0.24);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.key--wide {
+    min-width: 43px;
+}
+
+.key--mouse {
+    min-width: 48px;
+}
+
+.key--wheel {
+    font-size: 14px;
+}
+
+.control-prompt__label {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.control-prompt.is-hidden {
+    display: none;
+}
+
+/* -------------------------------------------------------------------------
+   Smaller screens
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+    .story-panel {
+        width: min(560px, 58vw);
+    }
+
+    .debug-tool {
+        width: min(360px, 42vw);
+        right: 24px;
+    }
+
+    .controls {
+        gap: 14px;
+    }
+
+    .control-prompt__label {
+        display: none;
+    }
+}

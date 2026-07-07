@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prop Inspection</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <section id="interact-prompt" class="interact-prompt" aria-hidden="true">
+        <div class="interact-prompt__accent" aria-hidden="true"></div>
+
+        <div class="interact-prompt__content">
+            <span id="interact-eyebrow" class="interact-prompt__eyebrow">INTERACTION</span>
+
+            <div class="interact-prompt__row">
+                <span id="interact-prefix" class="interact-prompt__prefix">Press</span>
+                <span id="interact-key" class="interact-key">E</span>
+                <span id="interact-message" class="interact-prompt__message">to inspect the object.</span>
+            </div>
+        </div>
+    </section>
+
+    <main id="inspection-app" class="inspection-app" aria-hidden="true">
+        <section class="story-panel" aria-live="polite">
+            <div class="story-panel__accent" aria-hidden="true"></div>
+
+            <div class="story-panel__content" id="story-content">
+                <div class="story-panel__meta">
+                    <span id="story-eyebrow" class="story-panel__eyebrow">INSPECTION</span>
+                    <span class="story-panel__counter" id="prop-counter">01 / 01</span>
+                </div>
+
+                <h1 class="story-panel__title" id="prop-label">Object</h1>
+                <p class="story-panel__description" id="prop-description"></p>
+            </div>
+        </section>
+
+        <section id="hotspot" class="hotspot" aria-live="polite">
+            <div class="hotspot__indicator" aria-hidden="true">
+                <span class="hotspot__ring"></span>
+                <span class="hotspot__dot"></span>
+            </div>
+
+            <div class="hotspot__text-wrap">
+                <span id="hotspot-label" class="hotspot__label">DETAIL DISCOVERED</span>
+                <p class="hotspot__text" id="hotspot-text"></p>
+            </div>
+        </section>
+
+        <aside id="debug-tool" class="debug-tool" aria-hidden="true">
+            <div class="debug-tool__header">
+                <span id="debug-tool-eyebrow" class="debug-tool__eyebrow">PROP SETUP TOOL</span>
+                <span id="debug-tool-location" class="debug-tool__location">SPOT 01 · PROP 01</span>
+            </div>
+
+            <div class="debug-tool__mode-row">
+                <span id="debug-output-mode-label">COPY VALUES AS</span>
+                <div class="debug-tool__mode-value">
+                    <kbd>H</kbd>
+                    <strong id="debug-tool-mode">DEFAULT</strong>
+                </div>
+            </div>
+
+            <div id="debug-hotspot-preview" class="debug-hotspot-preview debug-hotspot-only">
+                <span id="debug-preview-label">HOTSPOT PREVIEW</span>
+                <div class="debug-hotspot-preview__status">
+                    <span class="debug-hotspot-preview__dot" aria-hidden="true"></span>
+                    <strong id="debug-preview-status">NOT SET</strong>
+                </div>
+            </div>
+
+            <div class="debug-tool__grid">
+                <div class="debug-value debug-value--wide">
+                    <span id="debug-rotation-label" class="debug-value__label">ROTATION</span>
+                    <code id="debug-tool-rotation">0.00, 0.00, 0.00</code>
+                </div>
+
+                <div class="debug-value">
+                    <span id="debug-distance-label" class="debug-value__label">CURRENT ZOOM</span>
+                    <code id="debug-tool-distance">1.00</code>
+                </div>
+
+                <div class="debug-value debug-hotspot-only">
+                    <span id="debug-tolerance-label" class="debug-value__label">HOTSPOT TOLERANCE</span>
+                    <code id="debug-tool-tolerance">15.0°</code>
+                </div>
+            </div>
+
+            <span id="debug-saved-zoom-label" class="debug-tool__section-label">SAVED ZOOM VALUES</span>
+
+            <div class="debug-tool__zoom">
+                <div id="debug-zoom-min-card" class="debug-zoom-card">
+                    <div class="debug-zoom-card__title"><kbd>1</kbd><span id="debug-min-label">MIN</span></div>
+                    <code id="debug-tool-min">0.50</code>
+                </div>
+                <div id="debug-zoom-default-card" class="debug-zoom-card">
+                    <div class="debug-zoom-card__title"><kbd>2</kbd><span id="debug-default-label">START</span></div>
+                    <code id="debug-tool-default">1.00</code>
+                </div>
+                <div id="debug-zoom-max-card" class="debug-zoom-card">
+                    <div class="debug-zoom-card__title"><kbd>3</kbd><span id="debug-max-label">MAX</span></div>
+                    <code id="debug-tool-max">2.00</code>
+                </div>
+            </div>
+
+            <div class="debug-tool__controls">
+                <span><kbd id="debug-mouse-key">MOUSE</kbd> <span id="debug-control-rotate">Rotate</span></span>
+                <span><kbd>↕</kbd> <span id="debug-control-zoom">Zoom</span></span>
+                <span><kbd>SHIFT</kbd><kbd>↕</kbd> <span id="debug-control-fine-zoom">Fine Zoom</span></span>
+                <span><kbd>Q</kbd><kbd>E</kbd> <span id="debug-control-roll">Roll / Tilt</span></span>
+                <span><kbd>G</kbd> <span id="debug-control-set-hotspot">Set Hotspot</span></span>
+                <span><kbd>X</kbd> <span id="debug-control-clear-hotspot">Clear Preview</span></span>
+                <span class="debug-hotspot-only"><kbd>↑</kbd><kbd>↓</kbd> <span id="debug-control-tolerance">Tolerance</span></span>
+                <span class="debug-control-wide"><kbd>ENTER</kbd> <span id="debug-control-print">Print Config to F8</span></span>
+            </div>
+
+            <div id="debug-tool-notice" class="debug-tool__notice" aria-live="polite"></div>
+        </aside>
+
+        <footer class="controls" id="controls">
+            <div class="control-prompt">
+                <span id="control-mouse-key" class="key key--mouse">MOUSE</span>
+                <span id="control-rotate-label" class="control-prompt__label">Hold &amp; Rotate</span>
+            </div>
+
+            <div class="control-prompt">
+                <span class="key key--wheel">↕</span>
+                <span id="control-zoom-label" class="control-prompt__label">Zoom</span>
+            </div>
+
+            <div class="control-prompt">
+                <span class="key">R</span>
+                <span id="control-reset-label" class="control-prompt__label">Reset</span>
+            </div>
+
+            <div class="control-prompt" id="switch-prompt">
+                <span class="key key--wide">A / D</span>
+                <span id="control-switch-label" class="control-prompt__label">Switch</span>
+            </div>
+
+            <div class="control-prompt">
+                <span class="key key--wide">ESC</span>
+                <span id="control-close-label" class="control-prompt__label">Close</span>
+            </div>
+        </footer>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
